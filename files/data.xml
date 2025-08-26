@@ -1,0 +1,8 @@
+<window width="24" height="24" title="Test">
+	<include as="style">style.gms</include>
+	<div class="container">
+		<text>Hello,</text>
+		<text id="lighter">world</text>
+	</div>
+	<circle x="12" y="16" radius="4"></circle>
+</window>
