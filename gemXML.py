@@ -11,7 +11,7 @@ LETTERS_DIGITS: str = ascii_letters + digits
 VALID_TAGS = ["window", "text", "rect", "circle", "line", "include", "div"]
 VALID_INCLUDES = ["style", "md"]
 
-CLASSES: dict[str, list[str]] = {}
+CLASSES: dict[str, list] = {}
 IDS: dict[str, Any] = {}
 
 
@@ -777,29 +777,35 @@ class Compiler:
 				)
 
 
-def apply_cascading_styles(styles: dict, node: Any, parent: Any = None):
+def apply_cascading_styles(
+	styles: dict[str, dict[str, list]], node: Any, parent: Any = None
+):
 	if parent:
 		for prop, value in parent.styles.items():
 			node.styles[prop] = value
 
-	# Apply styles by tag name
-	tag_name = type(node).__name__.lower()
-	if tag_name in styles:
-		for prop_key, prop_val in styles[tag_name].items():
-			node.styles[prop_key] = prop_val
+	tag_name: str = type(node).__name__.lower()
+	node_id = IDS.get(node, None)
+	node_classes = [
+		class_name for class_name, nodes in CLASSES.items() if node in nodes
+	]
 
-	# Apply styles by class
-	for class_name, nodes in CLASSES.items():
-		if node in nodes and f".{class_name}" in styles:
-			for prop_key, prop_val in styles[f".{class_name}"].items():
-				node.styles[prop_key] = prop_val
+	for selectors, style in styles.items():
+		selected: bool = False
 
-	# Apply styles by ID
-	if node in IDS:
-		node_id = IDS[node]
-		if f"#{node_id}" in styles:
-			for prop_key, prop_val in styles[f"#{node_id}"].items():
-				node.styles[prop_key] = prop_val
+		splitted_selectors: list[str] = selectors.split(" ")
+
+		if tag_name in splitted_selectors:
+			selected = True
+		if node_id and "#" + node_id in splitted_selectors:
+			selected = True
+		for class_name in node_classes:
+			if "." + class_name in splitted_selectors:
+				selected = True
+
+		if selected:
+			for prop_key, value in style.items():
+				node.styles[prop_key] = value
 
 	if hasattr(node, "contents") and isinstance(node.contents, list):
 		for child in node.contents:
@@ -853,4 +859,6 @@ if __name__ == "__main__":
 			if not result.error:
 				print("\nStyles:")
 				print("Window's style:", result.value[0].styles)  # window
-				print("#lighter id style:", result.value[0].contents[0].contents[1].styles)  # text with 'lighter' id
+				print(
+					"#lighter id style:", result.value[0].contents[0].contents[1].styles
+				)  # text with 'lighter' id
