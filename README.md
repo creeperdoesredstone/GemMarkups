@@ -154,6 +154,14 @@ To select an element based on a unique ID, write a hash character (`#`) followed
 Selects elements with a specific class. <br>
 To select elements with a specific class, write a period (`.`) followed by the class name.
 
+### Shades
+
+GemSheet supports only 4 shades:
+- `0: #31f582`
+- `1: #40bfae`
+- `2: #4d4d7f`
+- `3: #38154f`
+
 ## GemMD `(.md)`
 
 GemMD is a Markdown-based language designed to style text.<br>
