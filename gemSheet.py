@@ -8,7 +8,7 @@ LETTERS_DIGITS: str = ascii_letters + digits
 
 
 class TT(Enum):
-	EOF, LBR, RBR, PROPERTY, VALUE, CLASS, ID, TAG = range(8)
+	EOF, LBR, RBR, COL, SEMICOL, IDENTIFIER, VALUE, CLASS, ID = range(9)
 
 	def __str__(self):
 		return super().__str__().replace("TT.", "")
@@ -118,6 +118,15 @@ class Lexer:
 		while self.current_char is not None and self.current_char in " \t\n":
 			self.advance()
 
+	def lex_special(self, token_type: TT, start_pos: Position):
+		name: str = ""
+		while (
+			self.current_char is not None and self.current_char in LETTERS_DIGITS + "_-"
+		):
+			name += self.current_char
+			self.advance()
+		return Token(start_pos, self.pos.copy(), token_type, name)
+
 	def lex(self):
 		tokens: list[Token] = []
 		res = Result()
@@ -127,67 +136,34 @@ class Lexer:
 
 			if self.current_char in " \t\n":
 				self.skip_whitespace()
+
 			elif self.current_char == "#":
-				tokens.append(Token(start_pos, self.pos.copy(), TT.ID))
 				self.advance()
+				tokens.append(self.lex_special(TT.ID, start_pos))
+
 			elif self.current_char == ".":
-				tokens.append(Token(start_pos, self.pos.copy(), TT.CLASS))
 				self.advance()
+				tokens.append(self.lex_special(TT.CLASS, start_pos))
+
 			elif self.current_char == "{":
 				tokens.append(Token(start_pos, self.pos.copy(), TT.LBR))
 				self.advance()
+
 			elif self.current_char == "}":
 				tokens.append(Token(start_pos, self.pos.copy(), TT.RBR))
 				self.advance()
-			elif self.current_char in LETTERS:
-				property_name: str = ""
-				while (
-					self.current_char is not None and self.current_char in LETTERS + "-"
-				):
-					property_name += self.current_char
-					self.advance()
-				property_end_pos: Position = self.pos.copy()
 
-				self.skip_whitespace()
-				if self.current_char == "{":
-					tokens.append(
-						Token(start_pos, property_end_pos, TT.TAG, property_name)
-					)
-				else:
-					if self.current_char != ":":
-						return res.fail(
-							ExpectedCharacter(
-								self.pos.copy(),
-								self.pos.copy(),
-								"':' (after property)",
-							)
-						)
-					self.advance()
-					self.skip_whitespace()
+			elif self.current_char == ":":
+				tokens.append(Token(start_pos, self.pos.copy(), TT.COL))
+				self.advance()
 
-					values_start_pos: Position = self.pos.copy()
-					values: str = ""
-					while (
-						self.current_char is not None and self.current_char not in ";\n"
-					):
-						values += self.current_char
-						self.advance()
-					values_end_pos: Position = self.pos.copy()
+			elif self.current_char == ";":
+				tokens.append(Token(start_pos, self.pos.copy(), TT.SEMICOL))
+				self.advance()
 
-					if self.current_char != ";":
-						return res.fail(
-							ExpectedCharacter(
-								self.pos.copy(), self.pos.copy(), "';' (after value)"
-							)
-						)
-					self.advance()
+			elif self.current_char in LETTERS_DIGITS:
+				tokens.append(self.lex_special(TT.IDENTIFIER, start_pos))
 
-					tokens.append(
-						Token(start_pos, property_end_pos, TT.PROPERTY, property_name)
-					)
-					tokens.append(
-						Token(values_start_pos, values_end_pos, TT.VALUE, values)
-					)
 			else:
 				return res.fail(
 					UnexpectedCharacter(
@@ -215,80 +191,109 @@ class Parser:
 		res = Result()
 		rules: dict = {}
 		while self.current_tok.type != TT.EOF:
-			selector = res.register(self.parse_selector())
+			selectors = res.register(self.parse_selectors())
 			if res.error:
 				return res
 			declarations = res.register(self.parse_block())
 			if res.error:
 				return res
-			rules[selector] = declarations
+			rules[selectors] = declarations
 		return res.success(rules)
 
-	def parse_selector(self):
+	def parse_selectors(self):
 		res = Result()
-		tok = self.current_tok
+		selectors = []
 
-		if tok.type in (TT.TAG, TT.ID, TT.CLASS):
-			if tok.type == TT.TAG:
-				selector = tok.value
-			else:
-				selector = "." if tok.type == TT.CLASS else "#"
-				self.advance()
-
-				if self.current_tok.type != TT.TAG:
-					return res.fail(InvalidSyntax(
-						self.current_tok.start_pos, self.current_tok.end_pos,
-						f"Expected an identifier after '{selector}'"
-					))
-				selector += self.current_tok.value
-			self.advance()
-			return res.success(selector)
-		return res.fail(
-			InvalidSyntax(
-				tok.start_pos, tok.end_pos, "Expected selector (tag, id, or class)"
+		while self.current_tok.type in (TT.CLASS, TT.ID, TT.IDENTIFIER):
+			prefix: str = (
+				"."
+				if self.current_tok.type == TT.CLASS
+				else "#" if self.current_tok.type == TT.ID else ""
 			)
-		)
-
-	def parse_block(self):
-		res = Result()
+			value: str = prefix + self.current_tok.value
+			selectors.append(value)
+			self.advance()
 
 		if self.current_tok.type != TT.LBR:
 			return res.fail(
 				InvalidSyntax(
-					self.current_tok.start_pos, self.current_tok.end_pos, "Expected '{'"
+					self.current_tok.start_pos,
+					self.current_tok.end_pos,
+					"Expected '{' after selectors.",
 				)
 			)
 		self.advance()
 
-		declarations = {}
-		while self.current_tok.type not in (TT.RBR, TT.EOF):
-			if self.current_tok.type == TT.PROPERTY:
-				prop = self.current_tok.value
-				self.advance()
-				if self.current_tok.type != TT.VALUE:
-					return res.fail(
-						InvalidSyntax(
-							self.current_tok.start_pos,
-							self.current_tok.end_pos,
-							"Expected value after property",
-						)
-					)
-				val = self.current_tok.value
-				declarations[prop] = val
-				self.advance()
-			else:
-				self.advance()
-
-		if self.current_tok.type != TT.RBR:
+		if not selectors:
 			return res.fail(
 				InvalidSyntax(
 					self.current_tok.start_pos,
 					self.current_tok.end_pos,
-					"Expected '}' after block.",
+					"Expected selectors (tags, IDs, or classes) before '{'."
 				)
 			)
+		
+		return res.success(" ".join(selectors))
 
-		self.advance()  # skip RBR
+	def parse_block(self):
+		res = Result()
+		declarations: dict[str, list[str]] = {}
+
+		while self.current_tok.type not in (TT.RBR, TT.EOF):
+			if self.current_tok.type != TT.IDENTIFIER:
+				return res.fail(
+					InvalidSyntax(
+						self.current_tok.start_pos,
+						self.current_tok.end_pos,
+						"Expected a property."
+					)
+				)
+			prop_key: str = self.current_tok.value
+			self.advance()
+
+			if self.current_tok.type != TT.COL:
+				return res.fail(
+					InvalidSyntax(
+						self.current_tok.start_pos,
+						self.current_tok.end_pos,
+						"Expected ':' after property."
+					)
+				)
+			self.advance()
+
+			values: list[str] = []
+			while self.current_tok.type == TT.IDENTIFIER:
+				values.append(self.current_tok.value)
+				self.advance()
+			
+			if not values:
+				return res.fail(
+					InvalidSyntax(
+						self.current_tok.start_pos,
+						self.current_tok.end_pos,
+						"Expected values after ':'."
+					)
+				)
+			
+			if self.current_tok.type != TT.SEMICOL:
+				return res.fail(
+					InvalidSyntax(
+						self.current_tok.start_pos,
+						self.current_tok.end_pos,
+						"Expected ';' after values."
+					)
+				)
+			self.advance()
+
+			declarations[prop_key] = values
+		
+		if self.current_tok.type != TT.RBR:
+			return res.fail(InvalidSyntax(
+				self.current_tok.start_pos,
+				self.current_tok.end_pos,
+				"Expected '}' after block."
+			))
+		self.advance()		
 		return res.success(declarations)
 
 
