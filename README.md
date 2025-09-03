@@ -127,6 +127,33 @@ GemXML provides default values for attributes of the tags listed below.
 GemSheet is a CSS-based language.<br>
 Contents of a GemSheet file can be included in a GemXML file using the `<include>` tag.
 
+### Basic syntax
+
+A GemSheet file contains one or more blocks. <br>
+Each block follows the following structure:
+
+```
+<selectors> {
+	<property>: <values>;
+}
+```
+
+### Selectors
+
+#### Element selector
+
+Selects elements based on the element name (`text`, `div`, ...)
+
+#### ID Selector
+
+Selects a specific element based on its ID. <br>
+To select an element based on a unique ID, write a hash character (`#`) followed by the ID name.
+
+#### Class Selector
+
+Selects elements with a specific class. <br>
+To select elements with a specific class, write a period (`.`) followed by the class name.
+
 ## GemMD `(.md)`
 
 GemMD is a Markdown-based language designed to style text.<br>
