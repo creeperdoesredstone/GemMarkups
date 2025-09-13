@@ -8,7 +8,22 @@ from gemSheet import parse_stylesheet
 LETTERS: str = ascii_letters
 LETTERS_DIGITS: str = ascii_letters + digits
 
-VALID_TAGS = ["window", "text", "rect", "circle", "line", "include", "div"]
+VALID_TAGS = [
+	"window",
+	"text",
+	"rect",
+	"circle",
+	"line",
+	"include",
+	"div",
+	"h1",
+	"h2",
+	"h3",
+	"b",
+	"i",
+	"bi",
+	"u",
+]
 VALID_INCLUDES = ["style", "md"]
 
 CLASSES: dict[str, list] = {}
@@ -140,11 +155,15 @@ class Lexer:
 		tokens: list[Token] = []
 		res = Result()
 
+		asterisk_mds: list[str] = ["i", "b", "bi"]
+
 		while self.current_char is not None:
 			start_pos: Position = self.pos.copy()
 			attributes: dict[str, str] = {}
+
 			if self.current_char in " \t\n":
 				self.advance()
+
 			elif self.current_char == "<":
 				self.advance()
 				self.skip_whitespace()
@@ -256,6 +275,7 @@ class Lexer:
 					tokens.append(Token(None, None, TT.DATA, attributes[attr]))
 
 				self.advance()
+
 			elif self.current_char == '"':
 				self.advance()
 				data: str = ""
@@ -273,6 +293,133 @@ class Lexer:
 					)
 				tokens.append(Token(start_pos, self.pos.copy(), TT.DATA, data))
 				self.advance()
+
+			elif self.current_char == "#":
+				count: int = 0
+				while self.current_char == "#":
+					count += 1
+					self.advance()
+				while self.current_char is not None and self.current_char in " \t":
+					self.advance()
+
+				if count > 3:
+					return res.fail(
+						InvalidSyntax(
+							start_pos,
+							self.pos.copy(),
+							"Expected a max of 3 '#' characters.",
+						)
+					)
+
+				content_start_pos: Position = self.pos.copy()
+				content: str = ""
+
+				while self.current_char is not None and self.current_char != "\n":
+					content += self.current_char
+					self.advance()
+
+				if not content:
+					return res.fail(
+						InvalidSyntax(
+							content_start_pos,
+							self.pos.copy(),
+							f"Expected content after '{'#' * count}'.",
+						)
+					)
+
+				content_lexer = Lexer("<md-content>", content)
+				content_tokens: list[Token] = res.register(content_lexer.lex())[:-1]
+				if res.error:
+					return res
+
+				for tok in content_tokens:
+					tok.start_pos = content_start_pos
+					tok.end_pos = self.pos.copy()
+
+				tokens.append(Token(start_pos, content_start_pos, TT.TAG, f"h{count}"))
+				tokens.extend(content_tokens)
+				tokens.append(
+					Token(self.pos.copy(), self.pos.copy(), TT.CLOSE, f"h{count}")
+				)
+
+			elif self.current_char == "*":
+				count = 0
+				while self.current_char == "*":
+					count += 1
+					self.advance()
+				while self.current_char is not None and self.current_char in " \t":
+					self.advance()
+
+				if count > 3:
+					return res.fail(
+						InvalidSyntax(
+							start_pos,
+							self.pos.copy(),
+							"Expected a max of 3 '*' characters.",
+						)
+					)
+
+				content_start_pos: Position = self.pos.copy()
+				content: str = ""
+
+				while self.current_char is not None and self.current_char not in "*\n":
+					content += self.current_char
+					self.advance()
+
+				if not content:
+					return res.fail(
+						InvalidSyntax(
+							content_start_pos,
+							self.pos.copy(),
+							f"Expected content after '{'*' * count}'.",
+						)
+					)
+
+				if self.current_char in (None, "\n"):
+					return res.fail(
+						InvalidSyntax(
+							self.pos.copy(),
+							self.pos.copy(),
+							"Reached EOL when parsing Markdown tag.",
+						)
+					)
+
+				end_count: int = 0
+				while self.current_char == "*":
+					end_count += 1
+					self.advance()
+
+				if end_count != count:
+					return res.fail(
+						InvalidSyntax(
+							self.pos.copy(),
+							self.pos.copy(),
+							f"Expected {count} '*' characters, got {end_count} '*' characters instead.",
+						)
+					)
+
+				content_lexer = Lexer("<md-content>", content)
+				content_tokens: list[Token] = res.register(content_lexer.lex())[:-1]
+				if res.error:
+					return res
+
+				for tok in content_tokens:
+					tok.start_pos = content_start_pos
+					tok.end_pos = self.pos.copy()
+
+				tokens.append(
+					Token(start_pos, content_start_pos, TT.TAG, asterisk_mds[count - 1])
+				)
+				tokens.extend(content_tokens)
+				tokens.append(
+					Token(
+						self.pos.copy(),
+						self.pos.copy(),
+						TT.CLOSE,
+						asterisk_mds[count - 1],
+					)
+				)
+
 			else:
 				content: str = ""
 
@@ -487,6 +634,28 @@ class Text:
 		return f"Text ('{self.contents}')"
 
 
+class Header:
+	def __init__(self, header_type: int, contents: list):
+		self.header_type = header_type
+		self.contents = contents
+
+		self.styles: dict[str, Any] = {}
+
+	def __repr__(self):
+		return f"H{self.header_type} {self.contents}"
+
+
+class StyledContent:
+	def __init__(self, style: str, contents: list):
+		self.style = style
+		self.contents = contents
+
+		self.styles: dict[str, Any] = {}
+
+	def __repr__(self):
+		return f"{self.style.upper()} {self.contents}"
+
+
 class Rect:
 	def __init__(self, x: int, y: int, width: int, height: int):
 		self.x = x
@@ -595,6 +764,11 @@ class Compiler:
 
 		return res.success(results)
 
+	def visitTextNode(self, node: TextNode):
+		return self.visitTagNode(
+			TagNode(node.start_pos, node.end_pos, {}, "text", node.content)
+		)
+
 	def visitTagNode(self, node: TagNode):
 		res = Result()
 
@@ -615,6 +789,7 @@ class Compiler:
 					IDS[obj] = id_name
 
 		match node.tag_name:
+
 			case "window":
 				# read window attributes
 				window_x: int = int(node.attributes.get("x", 45))
@@ -642,12 +817,14 @@ class Compiler:
 					return res
 
 				return res.success(self.window)
+
 			case "text":
 				text = Text(node.content)
 				self.window.contents.append(text)
 				update_class_and_id(text)
 
 				return res.success(text)
+
 			case "rect":
 				# read rect attributes
 				rect_x: int = int(node.attributes.get("x", self.window.width // 2 - 5))
@@ -660,6 +837,7 @@ class Compiler:
 				update_class_and_id(rect)
 
 				return res.success(rect)
+
 			case "circle":
 				# read rect attributes
 				circle_x: int = int(node.attributes.get("x", self.window.width // 2))
@@ -671,6 +849,7 @@ class Compiler:
 				update_class_and_id(circle)
 
 				return res.success(circle)
+
 			case "line":
 				# read line attributes
 				for attr in ("startx", "starty", "endx", "endy"):
@@ -693,6 +872,7 @@ class Compiler:
 				update_class_and_id(line)
 
 				return res.success(line)
+
 			case "div":
 				start_pos: int = len(self.window.contents)
 
@@ -707,6 +887,7 @@ class Compiler:
 				update_class_and_id(div)
 
 				return res.success(div)
+
 			case "include":
 				if "as" not in node.attributes:
 					return res.fail(
@@ -767,7 +948,38 @@ class Compiler:
 					return res
 
 				return res.success(None)
+
 			case _:
+				if node.tag_name in ("h1", "h2", "h3"):
+					start_pos: int = len(self.window.contents)
+
+					content = res.register(self.visit(node.content))
+					if res.error:
+						return res
+
+					self.window.contents = self.window.contents[:start_pos]
+
+					header = Header(int(node.tag_name[1]), content)
+					self.window.contents.append(header)
+					update_class_and_id(header)
+
+					return res.success(header)
+
+				if node.tag_name in ("b", "i", "bi", "u"):
+					start_pos: int = len(self.window.contents)
+
+					content = res.register(self.visit(node.content))
+					if res.error:
+						return res
+
+					self.window.contents = self.window.contents[:start_pos]
+
+					styled_content = StyledContent(node.tag_name, content)
+					self.window.contents.append(styled_content)
+					update_class_and_id(styled_content)
+
+					return res.success(styled_content)
+
 				return res.fail(
 					UnknownTag(
 						node.start_pos,
@@ -860,5 +1072,5 @@ if __name__ == "__main__":
 				print("\nStyles:")
 				print("Window's style:", result.value[0].styles)  # window
 				print(
-					"#lighter id style:", result.value[0].contents[0].contents[1].styles
+					"#lighter id style:", result.value[0].contents[1].contents[1].styles
 				)  # text with 'lighter' id
