@@ -38,7 +38,17 @@ The window should, *in theory*, look something like this:
 > ![A window displaying 'Hello, world'](helloworld.png)
 
 ### Markdown
-yeah i can't be bothered to update this rn
+Here is what GemXML currently uses for Markdown:
+```
+*Italic*
+**Bold**
+***Bold and italic***
+
+# H1
+## H2
+### H3
+```
+More markdown features are still being worked on as of now.
 
 ### Containers
 
@@ -128,3 +138,21 @@ GemXML provides default values for attributes of the tags listed below.
 
 GemSheet is a CSS-based language.<br>
 Contents of a GemSheet file can be included in a GemXML file using the `<include>` tag.
+
+### Syntax
+```
+tag_name {
+    attribute: value(s);
+    attribute2: values(s);
+    ...
+}
+
+.class_name {
+    ...
+}
+
+#id {
+    ...
+}
+```
+GemSheet isn't exactly... strict, for now.
