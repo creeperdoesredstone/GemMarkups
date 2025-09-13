@@ -4,7 +4,7 @@ These languages are designed for EmeraldOS's graphics engine.
 
 ## GemXML `(.xml)`
 
-GemXML is an XML-based language designed for general-purpose graphics for EmeraldOS.
+GemXML is an XML-based language designed for general-purpose graphics for windows in EmeraldOS.
 
 ### Structure of a tag
 ```xml
@@ -36,6 +36,9 @@ GemXML is an XML-based language designed for general-purpose graphics for Emeral
 ```
 The window should, *in theory*, look something like this:
 > ![A window displaying 'Hello, world'](helloworld.png)
+
+### Markdown
+yeah i can't be bothered to update this rn
 
 ### Containers
 
@@ -84,11 +87,10 @@ To include an external file, you can use the `<include>` tag as follows:
 ```xml
 <include as="style">style.gms</include>
 ```
-Currently, the only types supported are listed here:
+Currently, the only include types supported are listed here:
 | Include as | File format | Purpose       |
 | ---------- | ----------- | ------------- |
 | `style`    | `.gms`      | Styling       |
-| `md`       | `.gmd`      | Markdown Text |
 
 ### Default attributes
 
@@ -126,43 +128,3 @@ GemXML provides default values for attributes of the tags listed below.
 
 GemSheet is a CSS-based language.<br>
 Contents of a GemSheet file can be included in a GemXML file using the `<include>` tag.
-
-### Basic syntax
-
-A GemSheet file contains one or more blocks. <br>
-Each block follows the following structure:
-
-```
-<selectors> {
-	<property>: <values>;
-}
-```
-
-### Selectors
-
-#### Element selector
-
-Selects elements based on the element name (`text`, `div`, ...)
-
-#### ID Selector
-
-Selects a specific element based on its ID. <br>
-To select an element based on a unique ID, write a hash character (`#`) followed by the ID name.
-
-#### Class Selector
-
-Selects elements with a specific class. <br>
-To select elements with a specific class, write a period (`.`) followed by the class name.
-
-### Shades
-
-GemSheet supports only 4 shades:
-- `0: #31f582`
-- `1: #40bfae`
-- `2: #4d4d7f`
-- `3: #38154f`
-
-## GemMD `(.md)`
-
-GemMD is a Markdown-based language designed to style text.<br>
-Contents of a Markdown file can be included in a GemXML file using the `<include>` tag.
